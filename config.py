@@ -1,42 +1,31 @@
 import os
-from os import getenv
-
 
 # ------------------------------------------------
-API_ID = int(os.environ.get("API_ID", "35402748"))
+API_ID = int(os.environ.get("API_ID"))
+API_HASH = os.environ.get("API_HASH")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 # ------------------------------------------------
-API_HASH = os.environ.get("API_HASH","dbddbf1628d8c7f5b720985de9bdc804")
+BOT_USERNAME = "@Thesameer_x01bot"   # public handle, safe
+BOT_TEXT = "GAJJU BHAI KA EXTRACTOR" # display text, safe
 # ------------------------------------------------
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+OWNER_ID = int(os.environ.get("OWNER_ID"))
 # ------------------------------------------------
-BOT_USERNAME = os.environ.get("BOT_USERNAME", "@Thesameer_x01bot")
-BOT_TEXT = "GAJJU BHAI KA EXTRACTOR"
+# LOG CHANNEL IDs
+CHANNEL_ID = int(os.environ.get("CHANNEL_ID"))
+CHANNEL_ID2 = int(os.environ.get("CHANNEL_ID2"))
 # ------------------------------------------------
-OWNER_ID = int(os.environ.get("OWNER_ID", "5930927426"))
+MONGO_URL = os.environ.get("MONGO_URL")
 # ------------------------------------------------
-# //LOG CHANNEL ID 
-CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1003902933760"))
-
-# //FORCE_CHANNEL_ID
-CHANNEL_ID2 = int(os.environ.get("CHANNEL_ID2", "-1003902933760")) 
+PREMIUM_LOGS = int(os.environ.get("PREMIUM_LOGS"))
 # ------------------------------------------------
-MONGO_URL = os.environ.get("MONGO_URL", "mongodb+srv://besib69802:YMOfgvnyjbRgW5qt@cluster0.yzzu2gn.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
-# -----------------------------------------------
-PREMIUM_LOGS = int(os.environ.get("PREMIUM_LOGS", "-1003902933760"))
-# -----------------------------------------------
-join = '<a href="https://t.me/RPSC_UPSC_CURRENT">✳️ JOIN BACKUP</a>'
-# -----------------------------------------------
-UNSPLASH_ACCESS_KEY = 'RabDRmuXXBobanmwwbvpP5LwoG4J8ox34y5Sstz-9jk'
-# -----------------------------------------------
-UNSPLASH_QUERY = 'animal baby'
-# -----------------------------------------------
-ADMIN_BOT_USERNAME = "Mirza_Ghallib" #without @
-
-THUMB_URL = os.environ.get("THUMB_URL", "https://josephscollege.ac.in/wp-content/uploads/2022/04/1.jpg")
-
-
-
-
+join = '<a href="https://t.me/RPSC_UPSC_CURRENT">✳️ JOIN BACKUP</a>'  # public link, safe
+# ------------------------------------------------
+UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY")  # shift to env if personal key
+UNSPLASH_QUERY = 'animal baby'  # safe
+# ------------------------------------------------
+ADMIN_BOT_USERNAME = "Mirza_Ghallib"  # safe
+# ------------------------------------------------
+THUMB_URL = os.environ.get("THUMB_URL")
 # # Bot configuration
 # API_ID = int(os.environ.get("API_ID", "21157244"))
 # API_HASH = os.environ.get("API_HASH", "4981c2699bd91c7db836ec8f77e5b0f0")
