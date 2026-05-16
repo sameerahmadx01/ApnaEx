@@ -115,14 +115,21 @@
 #                     da = decrypt(a)
 #                     lines.append(f"{vt}:{da}\n")
         
-#         if "material_type" in r4.get("data", {}):
-#             mt = r4["data"]["material_type"]
-#             if mt == "PDF":
-#                 p1 = r4["data"].get("pdf_link", "")
-#                 pk1 = r4["data"].get("pdf_encryption_key", "")
-#                 p2 = r4["data"].get("pdf_link2", "")
-#                 pk2 = r4["data"].get("pdf2_encryption_key", "")
-                
+#        
+#    if "material_type" in r4.get("data", {}):
+#      mt = r4["data"]["material_type"]
+#      if mt == "VIDEO":
+#          vlink = r4["data"].get("video_link", "")
+#          vkey = r4["data"].get("video_encryption_key", "")
+        
+#          if vlink:
+#              dvlink = decrypt(vlink)
+#              if vkey:
+#                  dvkey = decrypt(vkey)
+#                  lines.append(f"{vt}:{dvlink}*{dvkey}\n")
+#              else:
+#                  lines.append(f"{vt}:{dvlink}\n")
+
 #                 if p1 and pk1:
 #                     dp1 = decrypt(p1)
 #                     depk1 = decrypt(pk1)
