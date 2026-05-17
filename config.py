@@ -5,7 +5,7 @@ API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 # ------------------------------------------------
-BOT_USERNAME = "@Thesameer_x01bot"   # public handle, safe
+BOT_USERNAME = "@Sadudi_bot"   # public handle, safe
 BOT_TEXT = "GAJJU BHAI KA EXTRACTOR" # display text, safe
 # ------------------------------------------------
 OWNER_ID = int(os.environ.get("OWNER_ID"))
