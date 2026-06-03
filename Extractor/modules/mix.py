@@ -29,6 +29,14 @@ time_new = current_time.strftime("%d-%m-%Y %I:%M %p")
 
 
 PREMIUM_LOGS = PREMIUM_LOGS
+import asyncio, base64, os
+from base64 import b64decode
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import unpad
+from datetime import datetime
+import pytz
+import aiohttp
+
 def decrypt(enc):
     """Decrypt AES encrypted content."""
     try:
@@ -82,44 +90,42 @@ async def fetch_item_details(session, api_base, course_id, item, headers):
         vt = data.get("Title", "")
         vl = data.get("download_link", "")
 
-            # Process video link
-            if vl:
-                dvl = decrypt(vl)
-                if dvl:
-                    outputs.append(f"{vt}:{dvl}")
-            else:
-                # Process encrypted links
-                for link in data.get("encrypted_links", []):
-                    a = link.get("path")
-                    k = link.get("key")
-                    if a and k:
-                        k1 = decrypt(k)
-                        k2 = decode_base64(k1)
-                        da = decrypt(a)
-                        if da and k2:
-                            outputs.append(f"{vt}:{da}*{k2}")
-                            break
-                    elif a:
-                        da = decrypt(a)
-                        if da:
-                            outputs.append(f"{vt}:{da}")
-                            break
+        # Process video link
+        if vl:
+            dvl = decrypt(vl)
+            if dvl:
+                outputs.append(f"{vt}:{dvl}")
+        else:
+            # Process encrypted links
+            for link in data.get("encrypted_links", []):
+                a = link.get("path")
+                k = link.get("key")
+                if a and k:
+                    k1 = decrypt(k)
+                    k2 = decode_base64(k1)
+                    da = decrypt(a)
+                    if da and k2:
+                        outputs.append(f"{vt}:{da}*{k2}")
+                        break
+                elif a:
+                    da = decrypt(a)
+                    if da:
+                        outputs.append(f"{vt}:{da}")
+                        break
 
-            # Process additional materials
-            if data.get("material_type") == "VIDEO":
-                # Process PDF links
-                for pdf_num in range(1, 3):
-                    pdf_link = data.get(f"pdf_link{'' if pdf_num == 1 else str(pdf_num)}", "")
-                    pdf_key = data.get(f"pdf{'_' if pdf_num == 1 else str(pdf_num)}_encryption_key", "")
-                    
-                    if pdf_link and pdf_key:
-                        dp = decrypt(pdf_link)
-                        dpk = decrypt(pdf_key)
-                        if dp:
-                            if dpk == "abcdefg":
-                                outputs.append(f"{vt}:{dp}")
-                            else:
-                                outputs.append(f"{vt}:{dp}*{dpk}")
+        # Process additional materials
+        if data.get("material_type") == "VIDEO":
+            for pdf_num in range(1, 3):
+                pdf_link = data.get(f"pdf_link{'' if pdf_num == 1 else str(pdf_num)}", "")
+                pdf_key = data.get(f"pdf{'_' if pdf_num == 1 else str(pdf_num)}_encryption_key", "")
+                if pdf_link and pdf_key:
+                    dp = decrypt(pdf_link)
+                    dpk = decrypt(pdf_key)
+                    if dp:
+                        if dpk == "abcdefg":
+                            outputs.append(f"{vt}:{dp}")
+                        else:
+                            outputs.append(f"{vt}:{dp}*{dpk}")
 
         return outputs
 
@@ -131,28 +137,27 @@ async def fetch_folder_contents(session, api_base, course_id, folder_id, headers
     """Recursively fetch contents of a folder."""
     try:
         outputs = []
-       async with session.get(
-    f"{api_base}/get/folder_contentsv2?course_id={course_id}&parent_id={folder_id}",
-    headers=headers
-) as response:
-    content_type = response.headers.get("Content-Type", "")
-    if "application/json" not in content_type:
+        async with session.get(
+            f"{api_base}/get/folder_contentsv2?course_id={course_id}&parent_id={folder_id}",
+            headers=headers
+        ) as response:
+            content_type = response.headers.get("Content-Type", "")
+            if "application/json" not in content_type:
                 text = await response.text()
                 logger.error(f"Unexpected response type for folder {folder_id}: {content_type}")
                 logger.error(f"Response text: {text[:200]}")
                 return []
 
-     j = await response.json()
+            j = await response.json()
             tasks = []
-                if "data" in j:
+
+            if "data" in j:
                 for item in j["data"]:
-                    # Process individual items
                     tasks.append(fetch_item_details(session, api_base, course_id, item, headers))
-                    # Recursively process subfolders
                     if item.get("material_type") == "FOLDER":
                         tasks.append(fetch_folder_contents(session, api_base, course_id, item["id"], headers))
 
-           # Chunked gather
+            # Chunked gather
             if tasks:
                 for i in range(0, len(tasks), 10):
                     batch = tasks[i:i+10]
@@ -161,6 +166,7 @@ async def fetch_folder_contents(session, api_base, course_id, folder_id, headers
                         if res:
                             outputs.extend(res)
                     await asyncio.sleep(1)
+
         return outputs
 
     except Exception as e:
@@ -175,30 +181,25 @@ async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_bas
             f"└─ Initializing batch: <code>{sanitized_course_name}</code>"
         )
 
-     async with aiohttp.ClientSession() as session:
-    async with session.get(
-        f"{api_base}/get/folder_contentsv2?course_id={raw_text2}&parent_id=-1",
-        headers=hdr1
-    ) as res2:
-        content_type = res2.headers.get("Content-Type", "")
-        if "application/json" not in content_type:
-            text = await res2.text()
-            logger.error(f"Unexpected response type for root folder: {content_type}")
-            logger.error(f"Response text: {text[:200]}")  # सिर्फ पहले 200 chars दिखाओ
-            await progress_msg.edit_text("❌ <b>Server did not return JSON</b>\n\nTry again later or check headers.")
-            return
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{api_base}/get/folder_contentsv2?course_id={raw_text2}&parent_id=-1",
+                headers=hdr1
+            ) as res2:
+                content_type = res2.headers.get("Content-Type", "")
+                if "application/json" not in content_type:
+                    text = await res2.text()
+                    logger.error(f"Unexpected response type for root folder: {content_type}")
+                    logger.error(f"Response text: {text[:200]}")
+                    await progress_msg.edit_text("❌ <b>Server did not return JSON</b>")
+                    return
 
-        j2 = await res2.json()
+                j2 = await res2.json()
+                if not j2.get("data"):
+                    await progress_msg.edit_text("❌ <b>No Content Found</b>")
+                    return
 
-           if not j2.get("data"):
-                await progress_msg.edit_text(
-                    "❌ <b>No Content Found</b>\n\n"
-                    "Try switching to v3 and retry."
-                )
-                return
-
-            # Process all content
-             all_outputs = []
+                all_outputs = []
                 tasks = []
                 total_items = len(j2["data"])
                 processed = 0
@@ -207,15 +208,16 @@ async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_bas
                     tasks.append(fetch_item_details(session, api_base, raw_text2, item, hdr1))
                     if item["material_type"] == "FOLDER":
                         tasks.append(fetch_folder_contents(session, api_base, raw_text2, item["id"], hdr1))
+
                     processed += 1
-                    if processed % 5 == 0:  # Update progress every 5 items
+                    if processed % 5 == 0:
                         await progress_msg.edit_text(
                             "🔄 <b>Processing Large Batch</b>\n"
                             f"├─ Progress: {processed}/{total_items}\n"
-                            f"└─ Current: <code>{item.get('Title', 'Unknown')}</code>"
+                            f"└─ Current: <code>{item.get('Title','Unknown')}</code>"
                         )
 
-             # Chunked gather
+                # Chunked gather
                 if tasks:
                     for i in range(0, len(tasks), 10):
                         batch = tasks[i:i+10]
@@ -225,24 +227,23 @@ async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_bas
                                 all_outputs.extend(res)
                         await asyncio.sleep(1)
 
-            if not all_outputs:
-                await progress_msg.edit_text("❌ <b>No content found in this batch</b>")
-                return
+                if not all_outputs:
+                    await progress_msg.edit_text("❌ <b>No content found in this batch</b>")
+                    return
 
-            # Count content types
-            video_count = sum(1 for url in all_outputs if any(ext in url.lower() for ext in ['.mp4', '.m3u8', '.mpd']))
-            pdf_count = sum(1 for url in all_outputs if '.pdf' in url.lower())
-            encrypted_count = sum(1 for url in all_outputs if '*' in url)
+                # Count content types
+                video_count = sum(1 for url in all_outputs if any(ext in url.lower() for ext in ['.mp4','.m3u8','.mpd']))
+                pdf_count = sum(1 for url in all_outputs if '.pdf' in url.lower())
+                encrypted_count = sum(1 for url in all_outputs if '*' in url)
 
-            # Save content to file
-            file_name = f"{app_name}_{sanitized_course_name}_{int(datetime.now().timestamp())}.txt"
-            with open(file_name, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(all_outputs))
+                file_name = f"{app_name}_{sanitized_course_name}_{int(datetime.now().timestamp())}.txt"
+                with open(file_name,'w',encoding='utf-8') as f:
+                    f.write('\n'.join(all_outputs))
 
-            # Calculate duration
-            end_time = datetime.now()
-            duration = end_time - datetime.fromtimestamp(start_time)
-            minutes, seconds = divmod(duration.total_seconds(), 60)
+                end_time = datetime.now()
+                duration = end_time - datetime.fromtimestamp(start_time)
+                minutes, seconds = divmod(duration.total_seconds(),60)
+
 
             # Prepare caption
             caption = (
