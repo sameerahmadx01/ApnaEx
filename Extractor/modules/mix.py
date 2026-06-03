@@ -60,21 +60,27 @@ async def fetch_item_details(session, api_base, course_id, item, headers):
         vt = item.get("Title", "")
         outputs = []
 
-        async with session.get(
-            f"{api_base}/get/fetchVideoDetailsById?course_id={course_id}&folder_wise_course=1&ytflag=0&video_id={fi}",
-            headers=headers
-        ) as response:
-            if not response.headers.get('Content-Type', '').startswith('application/json'):
-                logger.error(f"Unexpected response type for video ID {fi}")
-                return []
+        # Retry logic for 429
+        for attempt in range(3):
+            async with session.get(
+                f"{api_base}/get/fetchVideoDetailsById?course_id={course_id}&folder_wise_course=1&ytflag=0&video_id={fi}",
+                headers=headers
+            ) as response:
+                if response.status == 429:
+                    await asyncio.sleep(2)
+                    continue
+                if not response.headers.get('Content-Type', '').startswith('application/json'):
+                    logger.error(f"Unexpected response type for video ID {fi}")
+                    return []
+                r4 = await response.json()
+                break
 
-            r4 = await response.json()
-            data = r4.get("data")
-            if not data:
-                return []
+        data = r4.get("data")
+        if not data:
+            return []
 
-            vt = data.get("Title", "")
-            vl = data.get("download_link", "")
+        vt = data.get("Title", "")
+        vl = data.get("download_link", "")
 
             # Process video link
             if vl:
@@ -131,14 +137,13 @@ async def fetch_folder_contents(session, api_base, course_id, folder_id, headers
 ) as response:
     content_type = response.headers.get("Content-Type", "")
     if "application/json" not in content_type:
-        text = await response.text()
-        logger.error(f"Unexpected response type for folder {folder_id}: {content_type}")
-        logger.error(f"Response text: {text[:200]}")  # सिर्फ पहले 200 chars दिखाओ
-        return []   # अगर JSON नहीं है तो safe exit
+                text = await response.text()
+                logger.error(f"Unexpected response type for folder {folder_id}: {content_type}")
+                logger.error(f"Response text: {text[:200]}")
+                return []
 
-    j = await response.json()
-    tasks = []
-
+     j = await response.json()
+            tasks = []
                 if "data" in j:
                 for item in j["data"]:
                     # Process individual items
@@ -147,12 +152,15 @@ async def fetch_folder_contents(session, api_base, course_id, folder_id, headers
                     if item.get("material_type") == "FOLDER":
                         tasks.append(fetch_folder_contents(session, api_base, course_id, item["id"], headers))
 
+           # Chunked gather
             if tasks:
-                results = await asyncio.gather(*tasks)
-                for res in results:
-                    if res:
-                        outputs.extend(res)
-
+                for i in range(0, len(tasks), 10):
+                    batch = tasks[i:i+10]
+                    results = await asyncio.gather(*batch)
+                    for res in results:
+                        if res:
+                            outputs.extend(res)
+                    await asyncio.sleep(1)
         return outputs
 
     except Exception as e:
@@ -190,18 +198,15 @@ async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_bas
                 return
 
             # Process all content
-            all_outputs = []
-            tasks = []
-            
-            if "data" in j2:
+             all_outputs = []
+                tasks = []
                 total_items = len(j2["data"])
                 processed = 0
-                
+
                 for item in j2["data"]:
                     tasks.append(fetch_item_details(session, api_base, raw_text2, item, hdr1))
                     if item["material_type"] == "FOLDER":
                         tasks.append(fetch_folder_contents(session, api_base, raw_text2, item["id"], hdr1))
-                    
                     processed += 1
                     if processed % 5 == 0:  # Update progress every 5 items
                         await progress_msg.edit_text(
@@ -210,11 +215,15 @@ async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_bas
                             f"└─ Current: <code>{item.get('Title', 'Unknown')}</code>"
                         )
 
-            if tasks:
-                results = await asyncio.gather(*tasks)
-                for res in results:
-                    if res:
-                        all_outputs.extend(res)
+             # Chunked gather
+                if tasks:
+                    for i in range(0, len(tasks), 10):
+                        batch = tasks[i:i+10]
+                        results = await asyncio.gather(*batch)
+                        for res in results:
+                            if res:
+                                all_outputs.extend(res)
+                        await asyncio.sleep(1)
 
             if not all_outputs:
                 await progress_msg.edit_text("❌ <b>No content found in this batch</b>")
