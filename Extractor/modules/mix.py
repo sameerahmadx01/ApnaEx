@@ -125,14 +125,21 @@ async def fetch_folder_contents(session, api_base, course_id, folder_id, headers
     """Recursively fetch contents of a folder."""
     try:
         outputs = []
-        async with session.get(
-            f"{api_base}/get/folder_contentsv2?course_id={course_id}&parent_id={folder_id}",
-            headers=headers
-        ) as response:
-            j = await response.json()
-            tasks = []
-            
-            if "data" in j:
+       async with session.get(
+    f"{api_base}/get/folder_contentsv2?course_id={course_id}&parent_id={folder_id}",
+    headers=headers
+) as response:
+    content_type = response.headers.get("Content-Type", "")
+    if "application/json" not in content_type:
+        text = await response.text()
+        logger.error(f"Unexpected response type for folder {folder_id}: {content_type}")
+        logger.error(f"Response text: {text[:200]}")  # सिर्फ पहले 200 chars दिखाओ
+        return []   # अगर JSON नहीं है तो safe exit
+
+    j = await response.json()
+    tasks = []
+
+                if "data" in j:
                 for item in j["data"]:
                     # Process individual items
                     tasks.append(fetch_item_details(session, api_base, course_id, item, headers))
@@ -160,15 +167,22 @@ async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_bas
             f"└─ Initializing batch: <code>{sanitized_course_name}</code>"
         )
 
-        async with aiohttp.ClientSession() as session:
-            # Fetch root folder contents
-            async with session.get(
-                f"{api_base}/get/folder_contentsv2?course_id={raw_text2}&parent_id=-1",
-                headers=hdr1
-            ) as res2:
-                j2 = await res2.json()
+     async with aiohttp.ClientSession() as session:
+    async with session.get(
+        f"{api_base}/get/folder_contentsv2?course_id={raw_text2}&parent_id=-1",
+        headers=hdr1
+    ) as res2:
+        content_type = res2.headers.get("Content-Type", "")
+        if "application/json" not in content_type:
+            text = await res2.text()
+            logger.error(f"Unexpected response type for root folder: {content_type}")
+            logger.error(f"Response text: {text[:200]}")  # सिर्फ पहले 200 chars दिखाओ
+            await progress_msg.edit_text("❌ <b>Server did not return JSON</b>\n\nTry again later or check headers.")
+            return
 
-            if not j2.get("data"):
+        j2 = await res2.json()
+
+           if not j2.get("data"):
                 await progress_msg.edit_text(
                     "❌ <b>No Content Found</b>\n\n"
                     "Try switching to v3 and retry."
