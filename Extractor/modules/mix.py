@@ -68,24 +68,25 @@ async def fetch_item_details(session, api_base, course_id, item, headers):
         vt = item.get("Title", "")
         outputs = []
 
-        # Retry logic for 429
-        for attempt in range(3):
-            async with session.get(
-                f"{api_base}/get/fetchVideoDetailsById?course_id={course_id}&folder_wise_course=1&ytflag=0&video_id={fi}",
-                headers=headers
-            ) as response:
-                if response.status == 429:
-                    await asyncio.sleep(2)
-                    continue
-                if not response.headers.get('Content-Type', '').startswith('application/json'):
-                    logger.error(f"Unexpected response type for video ID {fi}")
-                    return []
-                r4 = await response.json()
-                break
-
-        data = r4.get("data")
-        if not data:
+     r4 = None  # initialize before loop
+for attempt in range(3):
+    async with session.get(
+        f"{api_base}/get/fetchVideoDetailsById?course_id={course_id}&folder_wise_course=1&ytflag=0&video_id={fi}",
+        headers=headers
+    ) as response:
+        if response.status == 429:
+            logger.warning(f"Rate limit hit for video {fi}, retrying...")
+            await asyncio.sleep(2)
+            continue
+        if not response.headers.get('Content-Type', '').startswith('application/json'):
+            logger.error(f"Unexpected response type for video ID {fi}")
             return []
+        r4 = await response.json()
+        break
+
+if not r4:
+    logger.error(f"Failed to fetch JSON for video ID {fi}")
+    return []
 
         vt = data.get("Title", "")
         vl = data.get("download_link", "")
