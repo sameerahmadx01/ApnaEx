@@ -68,17 +68,19 @@ async def fetch_item_details(session, api_base, course_id, item, headers):
         vt = item.get("Title", "")
         outputs = []
 
-     r4 = None  # initialize before loop
-for attempt in range(3):
+    # Safe + Slow Extraction
+r4 = None
+for attempt in range(5):   # ज्यादा retries
     async with session.get(
         f"{api_base}/get/fetchVideoDetailsById?course_id={course_id}&folder_wise_course=1&ytflag=0&video_id={fi}",
         headers=headers
     ) as response:
         if response.status == 429:
-            logger.warning(f"Rate limit hit for video {fi}, retrying...")
-            await asyncio.sleep(2)
+            wait_time = 30   # हर बार 30 सेकंड का delay
+            logger.warning(f"Rate limit hit for video {fi}, waiting {wait_time}s...")
+            await asyncio.sleep(wait_time)
             continue
-        if not response.headers.get('Content-Type', '').startswith('application/json'):
+        if not response.headers.get("Content-Type","").startswith("application/json"):
             logger.error(f"Unexpected response type for video ID {fi}")
             return []
         r4 = await response.json()
@@ -158,15 +160,16 @@ async def fetch_folder_contents(session, api_base, course_id, folder_id, headers
                     if item.get("material_type") == "FOLDER":
                         tasks.append(fetch_folder_contents(session, api_base, course_id, item["id"], headers))
 
-            # Chunked gather
-            if tasks:
-                for i in range(0, len(tasks), 10):
-                    batch = tasks[i:i+10]
-                    results = await asyncio.gather(*batch)
-                    for res in results:
-                        if res:
-                            outputs.extend(res)
-                    await asyncio.sleep(1)
+
+            # Chunked gather (slow + accurate)
+if tasks:
+    for i in range(0, len(tasks), 3):   # हर बार सिर्फ़ 3 tasks
+        batch = tasks[i:i+3]
+        results = await asyncio.gather(*batch)
+        for res in results:
+            if res:
+                outputs.extend(res)
+        await asyncio.sleep(30)  # हर batch के बीच 30 सेकंड का delay
 
         return outputs
 
@@ -218,15 +221,16 @@ async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_bas
                             f"└─ Current: <code>{item.get('Title','Unknown')}</code>"
                         )
 
-                # Chunked gather
-                if tasks:
-                    for i in range(0, len(tasks), 10):
-                        batch = tasks[i:i+10]
-                        results = await asyncio.gather(*batch)
-                        for res in results:
-                            if res:
-                                all_outputs.extend(res)
-                        await asyncio.sleep(1)
+               # Chunked gather (slow + accurate)
+if tasks:
+    for i in range(0, len(tasks), 3):   # हर बार सिर्फ़ 3 tasks
+        batch = tasks[i:i+3]
+        results = await asyncio.gather(*batch)
+        for res in results:
+            if res:
+                outputs.extend(res)
+        await asyncio.sleep(30)  # हर batch के बीच 30 सेकंड का delay
+
 
                 if not all_outputs:
                     await progress_msg.edit_text("❌ <b>No content found in this batch</b>")
