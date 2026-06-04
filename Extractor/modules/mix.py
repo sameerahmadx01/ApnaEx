@@ -212,10 +212,6 @@ async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_bas
                 if not j2.get("data"):
                     await progress_msg.edit_text("❌ <b>No Content Found</b>")
                     return
-except Exception as e:
-    logger.error(f"Error in v2_new: {e}")
-    await message.reply_text("❌ An unexpected error occurred.")
-    return                    
 
                 all_outputs = []
                 tasks = []
@@ -234,6 +230,15 @@ except Exception as e:
                             f"├─ Progress: {processed}/{total_items}\n"
                             f"└─ Current: <code>{item.get('Title','Unknown')}</code>"
                         )
+
+        return all_outputs
+
+    except Exception as e:
+        logger.error(f"Error in v2_new: {e}")
+        await message.reply_text("❌ An unexpected error occurred.")
+        return
+
+  
 
                # Chunked gather (slow + accurate)
 if tasks:
