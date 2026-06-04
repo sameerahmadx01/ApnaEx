@@ -148,47 +148,43 @@ async def fetch_item_details(session, api_base, course_id, item, headers):
 
 async def fetch_folder_contents(session, api_base, course_id, folder_id, headers):
     """Recursively fetch contents of a folder."""
-    try:
-        outputs = []
-        async with session.get(
-            f"{api_base}/get/folder_contentsv2?course_id={course_id}&parent_id={folder_id}",
-            headers=headers
-        ) as response:
-            content_type = response.headers.get("Content-Type", "")
-            if "application/json" not in content_type:
-                text = await response.text()
-                logger.error(f"Unexpected response type for folder {folder_id}: {content_type}")
-                logger.error(f"Response text: {text[:200]}")
-                return []
+   try:
+    outputs = []
+    async with session.get(
+        f"{api_base}/get/folder_contentsv2?course_id={course_id}&parent_id={folder_id}",
+        headers=headers
+    ) as response:
+        content_type = response.headers.get("Content-Type", "")
+        if "application/json" not in content_type:
+            text = await response.text()
+            logger.error(f"Unexpected response type for folder {folder_id}: {content_type}")
+            logger.error(f"Response text: {text[:200]}")
+            return []
 
-            j = await response.json()
-            tasks = []
-            # यहाँ आगे का processing code आएगा (items loop वगैरह)
+        j = await response.json()
+        tasks = []
 
-    except Exception as e:
-        logger.error(f"Error fetching folder contents: {e}")
-        return []
+        if "data" in j:
+            for item in j["data"]:
+                tasks.append(fetch_item_details(session, api_base, course_id, item, headers))
+                if item.get("material_type") == "FOLDER":
+                    tasks.append(fetch_folder_contents(session, api_base, course_id, item["id"], headers))
 
+        # Chunked gather (slow + accurate)
+        if tasks:
+            for i in range(0, len(tasks), 3):   # हर बार सिर्फ़ 3 tasks
+                batch = tasks[i:i+3]
+                results = await asyncio.gather(*batch)
+                for res in results:
+                    if res:
+                        outputs.extend(res)
+                await asyncio.sleep(30)  # हर batch के बीच 30 सेकंड का delay
 
-         
-          if "data" in j:
-                for item in j["data"]:
-                    tasks.append(fetch_item_details(session, api_base, course_id, item, headers))
-                    if item.get("material_type") == "FOLDER":
-                        tasks.append(fetch_folder_contents(session, api_base, course_id, item["id"], headers))
+    return outputs   # ✅ loop खत्म होने के बाद return
 
-
-            # Chunked gather (slow + accurate)
-if tasks:
-    for i in range(0, len(tasks), 3):   # हर बार सिर्फ़ 3 tasks
-        batch = tasks[i:i+3]
-        results = await asyncio.gather(*batch)
-        for res in results:
-            if res:
-                outputs.extend(res)
-        await asyncio.sleep(30)  # हर batch के बीच 30 सेकंड का delay
-
-    return outputs   # ✅ अब ये loop खत्म होने के बाद चलेगा
+except Exception as e:
+    logger.error(f"Error fetching folder contents: {e}")
+    return []
 
     
 async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_base, sanitized_course_name, start_time, start, end, pricing, input2, m1, m2):
