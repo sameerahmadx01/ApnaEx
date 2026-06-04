@@ -68,27 +68,36 @@ async def fetch_item_details(session, api_base, course_id, item, headers):
         vt = item.get("Title", "")
         outputs = []
 
-    # Safe + Slow Extraction
-r4 = None
-for attempt in range(5):   # ज्यादा retries
-    async with session.get(
-        f"{api_base}/get/fetchVideoDetailsById?course_id={course_id}&folder_wise_course=1&ytflag=0&video_id={fi}",
-        headers=headers
-    ) as response:
-        if response.status == 429:
-            wait_time = 30   # हर बार 30 सेकंड का delay
-            logger.warning(f"Rate limit hit for video {fi}, waiting {wait_time}s...")
-            await asyncio.sleep(wait_time)
-            continue
-        if not response.headers.get("Content-Type","").startswith("application/json"):
-            logger.error(f"Unexpected response type for video ID {fi}")
-            return []
-        r4 = await response.json()
-        break
+        r4 = None  # <-- यहाँ safe जगह पर डालो
 
-if not r4:
-    logger.error(f"Failed to fetch JSON for video ID {fi}")
-    return []
+        # Retry logic for 429
+        for attempt in range(5):
+            async with session.get(
+                f"{api_base}/get/fetchVideoDetailsById?course_id={course_id}&folder_wise_course=1&ytflag=0&video_id={fi}",
+                headers=headers
+            ) as response:
+                if response.status == 429:
+                    await asyncio.sleep(30)
+                    continue
+                if not response.headers.get('Content-Type', '').startswith('application/json'):
+                    logger.error(f"Unexpected response type for video ID {fi}")
+                    return []
+                r4 = await response.json()
+                break
+
+        if not r4:
+            logger.error(f"Failed to fetch JSON for video ID {fi}")
+            return []
+
+        data = r4.get("data")
+        if not data:
+            return []
+
+        # आगे का processing...
+    except Exception as e:
+        logger.error(f"Error fetching item details: {e}")
+        return []
+
 
         vt = data.get("Title", "")
         vl = data.get("download_link", "")
