@@ -61,15 +61,13 @@ def decode_base64(encoded_str):
         logger.error(f"Base64 decoding error: {e}")
         return ""
 
-
 async def fetch_item_details(session, api_base, course_id, item, headers):
     """Fetch details for a single item (video/pdf)."""
     try:
         fi = item.get("id")
         vt = item.get("Title", "")
         outputs = []
-
-        r4 = None  # <-- यहाँ safe जगह पर डालो
+        r4 = None
 
         # Retry logic for 429
         for attempt in range(5):
@@ -93,12 +91,6 @@ async def fetch_item_details(session, api_base, course_id, item, headers):
         data = r4.get("data")
         if not data:
             return []
-
-        # आगे का processing...
-    except Exception as e:
-        logger.error(f"Error fetching item details: {e}")
-        return []
-
 
         vt = data.get("Title", "")
         vl = data.get("download_link", "")
@@ -172,13 +164,13 @@ async def fetch_folder_contents(session, api_base, course_id, folder_id, headers
 
             # Chunked gather (slow + accurate)
             if tasks:
-                for i in range(0, len(tasks), 3):   # हर बार सिर्फ़ 3 tasks
+                for i in range(0, len(tasks), 3):
                     batch = tasks[i:i+3]
                     results = await asyncio.gather(*batch)
                     for res in results:
                         if res:
                             outputs.extend(res)
-                    await asyncio.sleep(30)  # हर batch के बीच 30 सेकंड का delay
+                    await asyncio.sleep(30)
 
         return outputs
 
@@ -186,8 +178,8 @@ async def fetch_folder_contents(session, api_base, course_id, folder_id, headers
         logger.error(f"Error fetching folder contents: {e}")
         return []
 
-
-async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_base, sanitized_course_name, start_time, start, end, pricing, input2, m1, m2):
+async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_base,
+                 sanitized_course_name, start_time, start, end, pricing, input2, m1, m2):
     """Process and extract course content."""
     try:
         progress_msg = await message.reply_text(
@@ -231,88 +223,73 @@ async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_bas
                             f"└─ Current: <code>{item.get('Title','Unknown')}</code>"
                         )
 
-        return all_outputs
+                # Chunked gather (slow + accurate)
+                if tasks:
+                    for i in range(0, len(tasks), 3):
+                        batch = tasks[i:i+3]
+                        results = await asyncio.gather(*batch)
+                        for res in results:
+                            if res:
+                                all_outputs.extend(res)
+                        await asyncio.sleep(30)
 
-    except Exception as e:
-        logger.error(f"Error in v2_new: {e}")
-        await message.reply_text("❌ An unexpected error occurred.")
-        return
+        if not all_outputs:
+            await progress_msg.edit_text("❌ <b>No content found in this batch</b>")
+            return
 
-  
+        # Count content types
+        video_count = sum(1 for url in all_outputs if any(ext in url.lower() for ext in ['.mp4','.m3u8','.mpd']))
+        pdf_count = sum(1 for url in all_outputs if '.pdf' in url.lower())
+        encrypted_count = sum(1 for url in all_outputs if '*' in url)
 
-               # Chunked gather (slow + accurate)
-if tasks:
-    for i in range(0, len(tasks), 3):   # हर बार सिर्फ़ 3 tasks
-        batch = tasks[i:i+3]
-        results = await asyncio.gather(*batch)
-        for res in results:
-            if res:
-                outputs.extend(res)
-        await asyncio.sleep(30)  # हर batch के बीच 30 सेकंड का delay
+        file_name = f"{app_name}_{sanitized_course_name}_{int(datetime.now().timestamp())}.txt"
+        with open(file_name, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(all_outputs))
 
+        end_time = datetime.now()
+        duration = end_time - datetime.fromtimestamp(start_time)
+        minutes, seconds = divmod(duration.total_seconds(), 60)
 
-                if not all_outputs:
-                    await progress_msg.edit_text("❌ <b>No content found in this batch</b>")
-                    return
+        # Prepare caption
+        caption = (
+            f"🎓 <b>COURSE EXTRACTED</b> 🎓\n\n"
+            f"📱 <b>APP:</b> {app_name}\n"
+            f"📚 <b>BATCH:</b> {sanitized_course_name}\n"
+            f"⏱ <b>EXTRACTION TIME:</b> {int(minutes):02d}:{int(seconds):02d}\n"
+            f"📅 <b>DATE:</b> {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d-%m-%Y %H:%M:%S')} IST\n\n"
+            f"📊 <b>CONTENT STATS</b>\n"
+            f"├─ 📁 Total Links: {len(all_outputs)}\n"
+            f"├─ 🎬 Videos: {video_count}\n"
+            f"├─ 📄 PDFs: {pdf_count}\n"
+            f"└─ 🔐 Encrypted: {encrypted_count}\n\n"
+            f"🚀 <b>Extracted by:</b> @{(await app.get_me()).username}\n\n"
+            f"<code>╾───• {BOT_TEXT} •───╼</code>"
+        )
 
-                # Count content types
-                video_count = sum(1 for url in all_outputs if any(ext in url.lower() for ext in ['.mp4','.m3u8','.mpd']))
-                pdf_count = sum(1 for url in all_outputs if '.pdf' in url.lower())
-                encrypted_count = sum(1 for url in all_outputs if '*' in url)
+        # Send file
+        await message.reply_document(document=file_name, caption=caption)
+        await app.send_document(PREMIUM_LOGS, file_name, caption=caption)
 
-                file_name = f"{app_name}_{sanitized_course_name}_{int(datetime.now().timestamp())}.txt"
-                with open(file_name,'w',encoding='utf-8') as f:
-                    f.write('\n'.join(all_outputs))
+        # Cleanup
+        try:
+            os.remove(file_name)
+        except Exception as e:
+            logger.error(f"File delete error: {e}")
 
-                end_time = datetime.now()
-                duration = end_time - datetime.fromtimestamp(start_time)
-                minutes, seconds = divmod(duration.total_seconds(),60)
+        # Delete temporary messages
+        for msg in [input2, m1, m2]:
+            try:
+                await msg.delete()
+            except Exception as e:
+                logger.error(f"Message delete error: {e}")
 
-
-            # Prepare caption
-            caption = (
-                f"🎓 <b>COURSE EXTRACTED</b> 🎓\n\n"
-                f"📱 <b>APP:</b> {app_name}\n"
-                f"📚 <b>BATCH:</b> {sanitized_course_name}\n"
-                f"⏱ <b>EXTRACTION TIME:</b> {int(minutes):02d}:{int(seconds):02d}\n"
-                f"📅 <b>DATE:</b> {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d-%m-%Y %H:%M:%S')} IST\n\n"
-                f"📊 <b>CONTENT STATS</b>\n"
-                f"├─ 📁 Total Links: {len(all_outputs)}\n"
-                f"├─ 🎬 Videos: {video_count}\n"
-                f"├─ 📄 PDFs: {pdf_count}\n"
-                f"└─ 🔐 Encrypted: {encrypted_count}\n\n"
-                f"🚀 <b>Extracted by:</b> @{(await app.get_me()).username}\n\n"
-                f"<code>╾───• {BOT_TEXT} •───╼</code>"
-            )
-
-            # Send file
-            await message.reply_document(
-                document=file_name,
-                caption=caption
-            )
-            await app.send_document(PREMIUM_LOGS, file_name, caption=caption)
-
-# Cleanup
-try:
-    os.remove(file_name)
-except Exception as e:
-    logger.error(f"File delete error: {e}")
-
-# Delete temporary messages
-for msg in [input2, m1, m2]:
-    try:
-        await msg.delete()
-    except Exception as e:
-        logger.error(f"Message delete error: {e}")
-
-
-            await progress_msg.edit_text(
-                "✅ <b>Extraction completed successfully!</b>\n\n"
-                f"📊 𝗙𝗶𝗻𝗮𝗹 𝗦𝘁𝗮𝘁𝘂𝘀:\n"
-                f"📚 Processed: {total_items} items\n"
-                f"📤 File has been uploaded\n\n"
-                f"Thank you for using UG Extractor Pro! 🌟"
-            )
+        await progress_msg.edit_text(
+            "✅ <b>Extraction completed successfully!</b>\n\n"
+            f"📊 𝗙𝗶𝗻𝗮𝗹 𝗦𝘁𝗮𝘁𝘂𝘀:\n"
+            f"📚 Processed: {total_items} items\n"
+            f"📤 File has been uploaded\n\n"
+            f"Thank you for using UG Extractor Pro! 🌟"
+        )
 
     except Exception as e:
         logger.error(f"Error in v2_new: {e}")
@@ -321,4 +298,3 @@ for msg in [input2, m1, m2]:
             f"Error: <code>{str(e)}</code>\n\n"
             "Please try again or contact support."
         )
-                              
