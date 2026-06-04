@@ -57,10 +57,10 @@ def decode_base64(encoded_str):
     try:
         decoded_bytes = base64.b64decode(encoded_str)
         return decoded_bytes.decode('utf-8')
-
-   except Exception as e:
+    except Exception as e:
         logger.error(f"Base64 decoding error: {e}")
         return ""
+
 
 async def fetch_item_details(session, api_base, course_id, item, headers):
     """Fetch details for a single item (video/pdf)."""
