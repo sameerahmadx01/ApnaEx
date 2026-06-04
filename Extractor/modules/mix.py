@@ -180,12 +180,9 @@ if tasks:
                 outputs.extend(res)
         await asyncio.sleep(30)  # हर batch के बीच 30 सेकंड का delay
 
-        return outputs
+    return outputs   # ✅ अब ये loop खत्म होने के बाद चलेगा
 
-    except Exception as e:
-        logger.error(f"Error fetching folder contents: {e}")
-        return []
-
+    
 async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_base, sanitized_course_name, start_time, start, end, pricing, input2, m1, m2):
     """Process and extract course content."""
     try:
