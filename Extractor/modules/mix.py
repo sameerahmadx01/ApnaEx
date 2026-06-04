@@ -148,26 +148,26 @@ async def fetch_item_details(session, api_base, course_id, item, headers):
 
 async def fetch_folder_contents(session, api_base, course_id, folder_id, headers):
     """Recursively fetch contents of a folder."""
-  try:
-    outputs = []
-    async with session.get(
-        f"{api_base}/get/folder_contentsv2?course_id={course_id}&parent_id={folder_id}",
-        headers=headers
-    ) as response:
-        content_type = response.headers.get("Content-Type", "")
-        if "application/json" not in content_type:
-            text = await response.text()
-            logger.error(f"Unexpected response type for folder {folder_id}: {content_type}")
-            logger.error(f"Response text: {text[:200]}")
-            return []
+    try:
+        outputs = []
+        async with session.get(
+            f"{api_base}/get/folder_contentsv2?course_id={course_id}&parent_id={folder_id}",
+            headers=headers
+        ) as response:
+            content_type = response.headers.get("Content-Type", "")
+            if "application/json" not in content_type:
+                text = await response.text()
+                logger.error(f"Unexpected response type for folder {folder_id}: {content_type}")
+                logger.error(f"Response text: {text[:200]}")
+                return []
 
-        j = await response.json()
-        tasks = []
-        # यहाँ आगे का processing code आएगा (items loop वगैरह)
+            j = await response.json()
+            tasks = []
+            # यहाँ आगे का processing code आएगा (items loop वगैरह)
 
-except Exception as e:
-    logger.error(f"Error fetching folder contents: {e}")
-    return []
+    except Exception as e:
+        logger.error(f"Error fetching folder contents: {e}")
+        return []
 
 
          
