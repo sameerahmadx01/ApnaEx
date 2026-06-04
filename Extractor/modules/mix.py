@@ -57,7 +57,8 @@ def decode_base64(encoded_str):
     try:
         decoded_bytes = base64.b64decode(encoded_str)
         return decoded_bytes.decode('utf-8')
-    except Exception as e:
+
+   except Exception as e:
         logger.error(f"Base64 decoding error: {e}")
         return ""
 
@@ -147,23 +148,30 @@ async def fetch_item_details(session, api_base, course_id, item, headers):
 
 async def fetch_folder_contents(session, api_base, course_id, folder_id, headers):
     """Recursively fetch contents of a folder."""
-    try:
-        outputs = []
-        async with session.get(
-            f"{api_base}/get/folder_contentsv2?course_id={course_id}&parent_id={folder_id}",
-            headers=headers
-        ) as response:
-            content_type = response.headers.get("Content-Type", "")
-            if "application/json" not in content_type:
-                text = await response.text()
-                logger.error(f"Unexpected response type for folder {folder_id}: {content_type}")
-                logger.error(f"Response text: {text[:200]}")
-                return []
+  try:
+    outputs = []
+    async with session.get(
+        f"{api_base}/get/folder_contentsv2?course_id={course_id}&parent_id={folder_id}",
+        headers=headers
+    ) as response:
+        content_type = response.headers.get("Content-Type", "")
+        if "application/json" not in content_type:
+            text = await response.text()
+            logger.error(f"Unexpected response type for folder {folder_id}: {content_type}")
+            logger.error(f"Response text: {text[:200]}")
+            return []
 
-            j = await response.json()
-            tasks = []
+        j = await response.json()
+        tasks = []
+        # यहाँ आगे का processing code आएगा (items loop वगैरह)
 
-            if "data" in j:
+except Exception as e:
+    logger.error(f"Error fetching folder contents: {e}")
+    return []
+
+
+         
+          if "data" in j:
                 for item in j["data"]:
                     tasks.append(fetch_item_details(session, api_base, course_id, item, headers))
                     if item.get("material_type") == "FOLDER":
@@ -208,6 +216,10 @@ async def v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_bas
                 if not j2.get("data"):
                     await progress_msg.edit_text("❌ <b>No Content Found</b>")
                     return
+except Exception as e:
+    logger.error(f"Error in v2_new: {e}")
+    await message.reply_text("❌ An unexpected error occurred.")
+    return                    
 
                 all_outputs = []
                 tasks = []
@@ -279,18 +291,19 @@ if tasks:
             )
             await app.send_document(PREMIUM_LOGS, file_name, caption=caption)
 
-            # Cleanup
-            try:
-                os.remove(file_name)
-            except:
-                pass
+# Cleanup
+try:
+    os.remove(file_name)
+except Exception as e:
+    logger.error(f"File delete error: {e}")
 
-            # Delete temporary messages
-            for msg in [input2, m1, m2]:
-                try:
-                    await msg.delete()
-                except:
-                    pass
+# Delete temporary messages
+for msg in [input2, m1, m2]:
+    try:
+        await msg.delete()
+    except Exception as e:
+        logger.error(f"Message delete error: {e}")
+
 
             await progress_msg.edit_text(
                 "✅ <b>Extraction completed successfully!</b>\n\n"
